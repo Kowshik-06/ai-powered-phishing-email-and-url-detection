@@ -1,0 +1,45 @@
+{
+  "randomForest": {
+    "accuracy": 0.9016,
+    "precision": 0.9227,
+    "recall": 0.8638,
+    "f1": 0.8923,
+    "roc_auc": 0.965,
+    "confusion_matrix": [
+      [
+        246,
+        17
+      ],
+      [
+        32,
+        203
+      ]
+    ]
+  },
+  "histGradientBoosting": {
+    "accuracy": 0.9116,
+    "precision": 0.9484,
+    "recall": 0.8596,
+    "f1": 0.9018,
+    "roc_auc": 0.9683,
+    "confusion_matrix": [
+      [
+        252,
+        11
+      ],
+      [
+        33,
+        202
+      ]
+    ]
+  },
+  "dataset": {
+    "samples": 2488,
+    "features": 13,
+    "classCounts": {
+      "0": 1313,
+      "1": 1175
+    },
+    "duplicateRows": 1134
+  }
+}

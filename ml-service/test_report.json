@@ -1,0 +1,13 @@
+{
+  "status": "passed",
+  "tests": [
+    {"name":"legitimate URL","input":"https://google.com","result":"legitimate","passed":true},
+    {"name":"phishing URL","input":"http://paypa1-verify.com/login","result":"phishing","passed":true},
+    {"name":"ambiguous URL","input":"https://example.com","result":"suspicious","passed":true},
+    {"name":"phishing email with URL and mismatched Reply-To","result":"phishing","passed":true},
+    {"name":"QR URL decoding and classification","result":"phishing","passed":true},
+    {"name":"Python source compilation","result":"passed","passed":true},
+    {"name":"Node backend syntax","result":"passed","passed":true}
+  ],
+  "note": "Evaluation uses the supplied 2,488-row engineered-feature dataset. It contains 1,134 duplicate rows, so the random stratified hold-out score should not be presented as real-world generalization accuracy. A grouped duplicate-aware split measured materially lower performance."
+}
