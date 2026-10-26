@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import AdminDashboard from './AdminDashboard';
+import ExplanationPanel from './components/ExplanationPanel';
 import { Shield, CheckCircle, XCircle, Activity, History, TrendingUp, Search, Upload, Mail, Link as LinkIcon, QrCode, Trash2, AlertTriangle, FileText, Globe, Image as ImageIcon, LogOut, Users } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const API = 'http://localhost:5000';
 const EMPTY = { type: null, riskPercentage: 0, confidencePercentage: 0, reasons: [], models: {} };
 const auth = () => ({ headers: { Authorization: 'Bearer ' + localStorage.getItem('token') } });
-const riskColor = r => r >= 70 ? 'text-red-400' : r >= 30 ? 'text-amber-400' : 'text-green-400';
 const riskLevel = r => r >= 70 ? 'HIGH' : r >= 30 ? 'MEDIUM' : 'LOW';
 
 function Login({ onLogin }) {
@@ -28,14 +29,57 @@ function Login({ onLogin }) {
   </div></div>;
 }
 
-function ResultCard({ result, onReport }) {
+function DomainResultCard({ result }) {
+  const rdap = result.rdap || {};
+  const registrar = rdap.registrar?.name || rdap.registrar || rdap.registry?.name || 'Not available';
+  const nameservers = rdap.nameservers?.length ? rdap.nameservers.map(x => x.hostname || x).join(', ') : 'Not available';
+  const status = rdap.status || rdap.state || 'Not available';
+  const dnsSec = rdap.dnsSec ?? rdap.dnssec ?? null;
+  const dates = { registration: rdap.creationDate || rdap.registrationDate || rdap.created || null, expiration: rdap.expirationDate || rdap.expires || rdap.endDate || null };
+  const formatDate = value => value ? new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : 'Not available';
+  const details = JSON.stringify(rdap, null, 2);
+  return <div className="border-2 border-cyan-500/60 rounded-2xl bg-slate-900/80 p-7 shadow-2xl">
+    <div className="flex items-center gap-4 mb-6"><Globe className="w-12 h-12 text-cyan-400"/><div><h2 className="text-2xl font-bold text-cyan-300">Domain Analysis</h2><p className="text-slate-500">{result.domain}</p></div></div>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="bg-slate-950 rounded-xl p-4"><div className="text-xs text-slate-600">DNS</div><div className="text-lg font-bold text-slate-200 mt-1">{result.dnsAvailable ? 'Available' : 'Unavailable'}</div></div>
+      <div className="bg-slate-950 rounded-xl p-4"><div className="text-xs text-slate-600">Resolved IPs</div><div className="text-sm font-bold text-slate-200 mt-1">{result.resolvedIps?.length ? result.resolvedIps.join(', ') : 'Not available'}</div></div>
+      <div className="bg-slate-950 rounded-xl p-4"><div className="text-xs text-slate-600">Registrar</div><div className="text-sm font-bold text-slate-200 mt-1">{registrar}</div></div>
+      <div className="bg-slate-950 rounded-xl p-4"><div className="text-xs text-slate-600">Domain Status</div><div className="text-sm font-bold text-slate-200 mt-1">{status}</div></div>
+      <div className="bg-slate-950 rounded-xl p-4"><div className="text-xs text-slate-600">Registration Date</div><div className="text-sm font-bold text-slate-200 mt-1">{formatDate(dates.registration)}</div></div>
+      <div className="bg-slate-950 rounded-xl p-4"><div className="text-xs text-slate-600">Expiration Date</div><div className="text-sm font-bold text-slate-200 mt-1">{formatDate(dates.expiration)}</div></div>
+      <div className="bg-slate-950 rounded-xl p-4"><div className="text-xs text-slate-600">Nameservers</div><div className="text-sm font-bold text-slate-200 mt-1">{nameservers}</div></div>
+      <div className="bg-slate-950 rounded-xl p-4"><div className="text-xs text-slate-600">DNSSEC</div><div className="text-sm font-bold text-slate-200 mt-1">{dnsSec ? (dnsSec.signed ? 'Signed' : 'Unsigned') : 'Not available'}</div></div>
+    </div>
+    <div className="mt-4 bg-slate-950 rounded-xl p-4"><div className="text-xs text-slate-600">VirusTotal</div><div className="text-sm font-bold text-slate-200 mt-1">{result.virusTotal ? `Available (${result.virusTotal.malicious || 0} malicious, ${result.virusTotal.suspicious || 0} suspicious)` : 'Not configured or unavailable'}</div></div>
+    <details className="mt-4"><summary className="cursor-pointer text-sm font-bold text-cyan-400">Technical Details</summary><pre className="mt-3 bg-slate-950 p-4 rounded-xl text-xs overflow-auto max-h-80">{details}</pre></details>
+    {result.notes?.length ? <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-300">{result.notes.join(' ')}</div> : null}
+    <p className="mt-4 text-xs text-slate-500">Domain intelligence is informational. It does not produce a phishing verdict. DNS and RDAP availability can vary, and a registered domain is not automatically safe.</p>
+  </div>;
+}
+
+function UnavailableCard({ result }) {
+  return <div className="border-2 border-slate-600/60 rounded-2xl bg-slate-900/80 p-7 shadow-2xl">
+    <div className="flex items-center gap-4"><AlertTriangle className="w-14 h-14 text-slate-400"/><div><h2 className="text-2xl font-bold text-slate-300">ANALYSIS UNAVAILABLE</h2><p className="text-slate-500 text-sm">{result.threatCategory || 'No verdict was produced'}</p></div></div>
+    <p className="mt-4 text-sm text-slate-400">{result.message || 'The scan could not be completed.'}</p>
+    <ExplanationPanel result={result} inputType={result.inputType}/>
+  </div>;
+}
+
+export function ResultCard({ result, onReport, inputType }) {
+  if (result.domainAnalysis) return <DomainResultCard result={result}/>;
+  if (result?.type === 'unavailable') return <UnavailableCard result={result}/>;
   if (!result?.type) return <div className="h-full min-h-[420px] flex items-center justify-center border border-slate-800 rounded-2xl bg-slate-900/60 text-slate-600"><div className="text-center"><Shield className="mx-auto w-16 h-16 mb-4 opacity-30"/><p>Waiting for a scan</p></div></div>;
-  const threat = result.type !== 'legitimate';
-  return <div className={'border-2 ' + (threat ? 'border-red-500/60' : 'border-green-500/60') + ' rounded-2xl bg-slate-900/80 p-7 shadow-2xl'}>
-    <div className="flex justify-between items-start"><div className="flex gap-4 items-center">{threat ? <XCircle className="w-14 h-14 text-red-400"/> : <CheckCircle className="w-14 h-14 text-green-400"/>}<div><h2 className={'text-2xl font-bold ' + (threat ? 'text-red-400' : 'text-green-400')}>{result.type.toUpperCase()}</h2><p className="text-slate-500 text-sm">{result.threatCategory || 'Threat assessment'}</p></div></div><div className={'text-right ' + riskColor(result.riskPercentage)}><div className="text-5xl font-black">{result.riskPercentage}%</div><div className="text-xs tracking-widest">{riskLevel(result.riskPercentage)} RISK</div></div></div>
-    <div className="mt-7 grid grid-cols-2 md:grid-cols-4 gap-3">{[['Confidence', result.confidencePercentage + '%'], ['URL length', result.urlLength ?? '-'], ['HTTPS', result.hasHttps ? 'YES' : 'NO'], ['Keywords', result.suspiciousKeywords ?? '-']].map(([a,b]) => <div className="bg-slate-950 rounded-xl p-4" key={a}><div className="text-xs text-slate-600">{a}</div><div className="text-lg font-bold text-slate-200 mt-1">{b}</div></div>)}</div>
-    {result.models && <div className="mt-6"><h3 className="text-sm font-bold text-cyan-400 mb-3">MODEL ENSEMBLE</h3><div className="grid grid-cols-2 md:grid-cols-4 gap-3">{Object.entries(result.models).map(([k,v]) => <div className="bg-slate-950 p-3 rounded-lg" key={k}><div className="text-xs text-slate-500 capitalize">{k.replace(/([A-Z])/g, ' $1')}</div><div className="font-bold text-cyan-300">{v}%</div></div>)}</div></div>}
-    <div className="mt-6"><h3 className="text-sm font-bold text-cyan-400 mb-3">EXPLAINABLE AI — WHY?</h3><ul className="space-y-2">{(result.reasons || []).map((r,i) => <li key={i} className="text-sm text-slate-300 flex gap-2"><AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5"/>{r}</li>)}</ul></div>
+  const review = result.type === 'review';
+  const threat = !review && result.type !== 'legitimate';
+  const finalScore = result.riskPercentage;
+  const verdictClass = review ? 'text-amber-300' : threat ? 'text-red-400' : 'text-green-400';
+  return <div className={'border-2 ' + (review ? 'border-amber-500/60' : threat ? 'border-red-500/60' : 'border-green-500/60') + ' rounded-2xl bg-slate-900/80 p-7 shadow-2xl'}>
+    <div className="flex justify-between items-start mb-3"><div className="flex gap-3 items-start">{review ? <AlertTriangle className="w-14 h-14 text-amber-300"/> : threat ? <XCircle className="w-14 h-14 text-red-400"/> : <CheckCircle className="w-14 h-14 text-green-400"/>}<div><h2 className={'text-2xl font-bold ' + verdictClass}>{result.type.toUpperCase()}</h2><p className="text-slate-500 text-sm">{result.threatCategory || 'Threat assessment'}</p>{result.decisionSource && result.decisionSource !== 'model' && <span className={'inline-block mt-2 px-2.5 py-0.5 rounded border text-xs font-bold ' + (result.decisionSource === 'trusted-domain-override' ? 'bg-cyan-900/30 text-cyan-300 border border-cyan-700/50' : 'bg-amber-900/30 text-amber-300 border border-amber-700/50')}>{result.decisionSource === 'trusted-domain-override' ? 'Trusted-domain rule' : (result.decisionSource || '').split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</span>}</div></div><div className="text-right"><div className={'text-5xl font-bold ' + verdictClass}>{finalScore}%</div><div className="text-xs tracking-widest text-slate-500">{result.scoreMeaning ? 'FINAL RISK (after rule override)' : riskLevel(result.riskPercentage) + ' RISK'}</div></div></div>
+    {(result.modelPrediction && result.modelPrediction !== result.type) && <div className="mt-5 rounded-lg border border-slate-700/50 bg-slate-900/40 p-4"><div className="flex items-center gap-2 mb-2"><AlertTriangle className="w-4 h-4 text-slate-400 shrink-0"/><h3 className="text-sm font-bold text-slate-300">Model output vs final verdict</h3></div><div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm"><div className="bg-slate-950/50 rounded p-3"><div className="text-xs text-slate-500">Final verdict</div><div className="font-bold text-slate-200">{result.type.toUpperCase()}</div></div><div className="bg-slate-950/50 rounded p-3"><div className="text-xs text-slate-500">Underlying model</div><div className="font-bold text-slate-200">{result.modelPrediction.toUpperCase()}</div></div><div className="bg-slate-950/50 rounded p-3"><div className="text-xs text-slate-500">Model score (uncalibrated)</div><div className="font-bold text-slate-200">{result.modelRiskPercentage}%</div></div></div><p className="mt-3 text-xs text-slate-500">{result.scoreMeaning || 'The model flagged this URL, but the final decision was adjusted.'}</p><p className="mt-1 text-xs text-slate-600">Model scores are uncalibrated and are not a verified probability of phishing. A trusted hostname does not guarantee every page on it is safe.</p></div>}
+    <div className="mt-7 grid grid-cols-2 md:grid-cols-4 gap-3">{[[result.scoreMeaning ? 'Distance from 50%' : 'Confidence', result.confidencePercentage === null || result.confidencePercentage === undefined ? '-' : result.confidencePercentage + '%'], ['URL length', result.urlLength ?? '-'], ['HTTPS', result.hasHttps === true ? 'YES' : result.hasHttps === false ? 'NO' : '-'], ['Keywords', result.suspiciousKeywords ?? '-']].map(([a,b]) => <div className="bg-slate-950 rounded-xl p-4" key={a}><div className="text-xs text-slate-600">{a}</div><div className="text-lg font-bold text-slate-200 mt-1">{b}</div></div>)}</div>
+    {result.models && <div className="mt-6"><h3 className="text-sm font-bold text-cyan-400 mb-3">{result.scoreMeaning ? 'UNCALIBRATED MODEL SCORES' : 'MODEL ENSEMBLE'}</h3><div className="grid grid-cols-2 md:grid-cols-4 gap-3">{Object.entries(result.models).map(([k,v]) => <div className="bg-slate-950 p-3 rounded-lg" key={k}><div className="text-xs text-slate-500 capitalize">{k.replace(/([A-Z])/g, ' $1')}</div><div className="font-bold text-cyan-300">{v}%</div></div>)}</div></div>}
+    <div className="mt-6"><h3 className="text-sm font-bold text-cyan-400 mb-3">{result.scoreMeaning ? 'ANALYSIS NOTES' : 'EXPLAINABLE AI — WHY?'}</h3><ul className="space-y-2">{(result.reasons || []).map((r,i) => <li key={i} className="text-sm text-slate-300 flex gap-2"><AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5"/>{r}</li>)}</ul></div>
+    <ExplanationPanel result={result} inputType={inputType}/>
     <button onClick={() => onReport(result)} className="mt-6 px-4 py-2 rounded-lg bg-cyan-500 text-slate-950 font-bold"><FileText size={15} className="inline mr-2"/>Export PDF Report</button>
   </div>;
 }
@@ -58,9 +102,13 @@ export default function App() {
       else if(mode==='qr') r=await axios.post(API+'/predict-qr',{imageBase64:await readFile(qr)},auth());
       else if(mode==='attachment') r=await axios.post(API+'/analyze-attachment',{filename:file.name,fileBase64:await readFile(file)},auth());
       else if(mode==='screenshot') r=await axios.post(API+'/analyze-screenshot',{imageBase64:await readFile(screen)},auth());
-      else { r=await axios.post(API+'/domain-intelligence',{domain},auth()); setExtra(r.data); return; }
+      else { r=await axios.post(API+'/domain-intelligence',{domain},auth()); setResult({...r.data,domainAnalysis:true}); await load(); return; }
       setResult(r.data); await load();
-    } catch(e) { setError(e.response?.data?.error || e.message || 'Scan failed'); } finally { setLoading(false); }
+    } catch(e) {
+      const message = e.response?.data?.error || e.message || 'Scan failed';
+      setError(message);
+      setResult({ type: 'unavailable', inputType: mode, message });
+    } finally { setLoading(false); }
   };
   const report = async data => { try { const r=await axios.post(API+'/report',data,auth()); const a=document.createElement('a'); a.href='data:application/pdf;base64,'+r.data.pdfBase64; a.download='phishing-threat-report.pdf'; a.click(); } catch(e) { setError('PDF report generation failed: '+e.message); } };
   const clearHistory = async () => { await axios.delete(API+'/history',auth()); load(); };
@@ -80,10 +128,10 @@ export default function App() {
           {mode==='email' && <textarea value={email} onChange={e=>setEmail(e.target.value)} placeholder="Paste raw .eml content..." className="w-full h-64 bg-slate-950 border border-slate-700 rounded-xl p-4 font-mono text-sm"/>}
           {mode==='domain' && <input value={domain} onChange={e=>setDomain(e.target.value)} placeholder="example.com" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-4"/>}
           {['qr','attachment','screenshot'].includes(mode) && <label className="h-64 border-2 border-dashed border-slate-700 rounded-xl flex flex-col items-center justify-center cursor-pointer"><Upload className="text-cyan-400 mb-3"/><span>{(mode==='qr'?qr:mode==='attachment'?file:screen)?.name || 'Choose a file'}</span><input type="file" accept={mode==='qr'||mode==='screenshot'?'image/*':'*/*'} className="hidden" onChange={e=>{const f=e.target.files[0]; if(mode==='qr')setQr(f); else if(mode==='attachment')setFile(f); else setScreen(f);}}/></label>}
-          <button onClick={scan} disabled={loading} className="w-full mt-5 p-4 rounded-xl bg-green-500 text-slate-950 font-black disabled:opacity-50">{loading?'ANALYZING...':'EXECUTE THREAT SCAN'}</button>{error&&<div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm">{error}</div>}{extra&&<pre className="mt-5 bg-slate-950 p-4 rounded-xl text-xs overflow-auto max-h-72">{JSON.stringify(extra,null,2)}</pre>}</section><ResultCard result={result} onReport={report}/></div></>}
+          <button onClick={scan} disabled={loading} className="w-full mt-5 p-4 rounded-xl bg-green-500 text-slate-950 font-black disabled:opacity-50">{loading?'ANALYZING...':'EXECUTE THREAT SCAN'}</button>{error&&<div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm">{error}</div>}{extra&&<pre className="mt-5 bg-slate-950 p-4 rounded-xl text-xs overflow-auto max-h-72">{JSON.stringify(extra,null,2)}</pre>}</section><ResultCard result={result} onReport={report} inputType={mode}/></div></>}
       {tab==='history' && <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6"><div className="flex justify-between mb-5"><h2 className="text-xl font-bold">Scan History</h2><button onClick={clearHistory} className="text-red-400 text-sm"><Trash2 size={16} className="inline mr-1"/>Clear</button></div><div className="relative mb-5"><Search className="absolute left-3 top-3 text-slate-600" size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search scans..." className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 pl-10"/></div><div className="overflow-auto"><table className="w-full text-sm"><thead><tr className="text-slate-500 border-b border-slate-800"><th className="text-left p-3">Type</th><th className="text-left p-3">Input</th><th className="text-left p-3">Risk</th><th className="text-left p-3">Time</th></tr></thead><tbody>{filtered.map(x=><tr className="border-b border-slate-800/60" key={x.id}><td className="p-3 uppercase text-cyan-400">{x.type}</td><td className="p-3 max-w-md truncate">{x.input}</td><td className={'p-3 '+(x.riskPercentage>=70?'text-red-400':'text-green-400')}>{x.riskPercentage}%</td><td className="p-3 text-slate-500">{new Date(x.timestamp).toLocaleString()}</td></tr>)}</tbody></table></div></section>}
       {tab==='analytics' && <section><div className="grid md:grid-cols-2 gap-7">{metrics&&Object.entries(metrics).filter(([_,m])=>m&&typeof m.accuracy==='number').map(([name,m])=><div className="bg-slate-900 border border-slate-800 rounded-2xl p-6" key={name}><h2 className="font-bold text-cyan-400 mb-5 capitalize">{name.replace(/([A-Z])/g,' $1')} Evaluation</h2><div className="grid grid-cols-2 gap-3">{[['Accuracy',m.accuracy],['Precision',m.precision],['Recall',m.recall],['F1',m.f1],['ROC-AUC',m.roc_auc]].map(([k,v])=><div className="bg-slate-950 p-4 rounded-lg" key={k}><div className="text-xs text-slate-500">{k}</div><div className="text-2xl font-bold">{(v*100).toFixed(1)}%</div></div>)}</div></div>)}</div>{metrics&&metrics.randomForest&&<div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mt-7"><h2 className="font-bold text-cyan-400 mb-5">Model Comparison</h2><ResponsiveContainer width="100%" height={320}><BarChart data={['accuracy','precision','recall','f1','roc_auc'].map(k=>({metric:k.toUpperCase(),RandomForest:metrics.randomForest[k]*100,HistGradientBoosting:metrics.histGradientBoosting[k]*100,DeepLearning:metrics.deepLearning[k]*100}))}><CartesianGrid strokeDasharray="3 3" stroke="#1e293b"/><XAxis dataKey="metric" stroke="#64748b"/><YAxis domain={[0,100]} stroke="#64748b"/><Tooltip/><Bar dataKey="RandomForest"/><Bar dataKey="HistGradientBoosting"/><Bar dataKey="DeepLearning"/></BarChart></ResponsiveContainer></div>}</section>}
-      {tab==='admin' && <section className="grid md:grid-cols-3 gap-5">{admin&&Object.entries(admin).map(([k,v])=><div key={k} className="bg-slate-900 border border-slate-800 rounded-xl p-6"><div className="text-xs text-slate-500 uppercase">{k}</div><div className="text-3xl font-black mt-2">{v}</div></div>)}</section>}
+      {tab==='admin' && user.role==='admin' && <AdminDashboard token={localStorage.getItem('token')} initialOverview={admin}/>}
     </main>
   </div>;
 }

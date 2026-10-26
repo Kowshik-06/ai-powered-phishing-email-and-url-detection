@@ -19,6 +19,11 @@ coverage/
 # Build output
 build/
 dist/
+/src/tailwind.output.css
+
+# Model artifacts (supply separately or explicitly approve publication)
+/ml-service/*.pkl
+/ml-service/*.pt
 
 # Local secrets and configuration
 .env
@@ -28,6 +33,7 @@ dist/
 # Local account data and scan history
 /backend/users.json
 /backend/scan_history.json
+/backend/alerts.json
 
 # Runtime logs and temporary files
 *.log
@@ -38,6 +44,7 @@ logs/
 
 # Dataset redistribution source/license has not been documented yet
 /ml-service/dataset.csv
+/ml-service/datasets/
 
 # Operating system files
 .DS_Store
